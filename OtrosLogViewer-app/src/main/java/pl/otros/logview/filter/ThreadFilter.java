@@ -15,19 +15,35 @@
  ******************************************************************************/
 package pl.otros.logview.filter;
 
-import net.miginfocom.swing.MigLayout;
+import java.awt.Component;
+import java.awt.event.ActionEvent;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Properties;
+import java.util.Set;
+import java.util.TreeSet;
+
+import javax.swing.AbstractAction;
+import javax.swing.DefaultListModel;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextField;
+import javax.swing.ListSelectionModel;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+
 import org.apache.commons.lang.ArrayUtils;
 import org.jdesktop.swingx.JXHyperlink;
+
+import net.miginfocom.swing.MigLayout;
 import pl.otros.logview.api.gui.LogDataTableModel;
 import pl.otros.logview.api.model.LogData;
 import pl.otros.logview.api.pluginable.LogFilterValueChangeListener;
 import pl.otros.logview.api.theme.Theme;
-
-import javax.swing.*;
-import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.util.*;
-import java.util.List;
 
 public class ThreadFilter extends AbstractLogFilter {
   private static final String NAME = "Thread Filter";
@@ -36,11 +52,13 @@ public class ThreadFilter extends AbstractLogFilter {
   private final Set<String> selectedThread;
   private final JPanel panel;
   private final DefaultListModel<String> listModel;
+  private final DefaultListModel<String> filteredListModel;
 
   public ThreadFilter() {
     super(NAME, DESCRIPTION);
     selectedThread = new HashSet<>();
     listModel = new DefaultListModel<>();
+    filteredListModel = new DefaultListModel<>();
     jList = new JList<>(listModel);
     jList.getSelectionModel().setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
     jList.addListSelectionListener(e -> {
@@ -53,10 +71,38 @@ public class ThreadFilter extends AbstractLogFilter {
         listener.ifPresent(LogFilterValueChangeListener::valueChanged);
       }
     });
+    
+    JTextField threadSearchField = new JTextField();
+    threadSearchField.getDocument().addDocumentListener(new DocumentListener() {
+
+      @Override
+      public void insertUpdate(DocumentEvent e) {
+        filter();
+      }
+
+      @Override
+      public void removeUpdate(DocumentEvent e) {
+        filter();
+      }
+
+      @Override
+      public void changedUpdate(DocumentEvent e) {
+      }
+
+      private void filter() {
+        String filter = threadSearchField.getText();
+        filterThreadModelList(filter);
+      }
+    });
+    
+    JLabel threadSearchLabel = new JLabel("Thread Search:");
+    threadSearchLabel.setLabelFor(threadSearchField);
     JLabel jLabel = new JLabel("Threads:");
     jLabel.setLabelFor(jList);
     jLabel.setDisplayedMnemonic('t');
     panel = new JPanel(new MigLayout());
+    panel.add(threadSearchLabel, "wrap");
+    panel.add(threadSearchField, "grow, wrap");
     panel.add(jLabel, "wrap");
     panel.add(new JScrollPane(jList), "wrap, right, growx");
     panel.add(new JLabel("Use CTRL for multi selection"), "wrap");
@@ -76,10 +122,34 @@ public class ThreadFilter extends AbstractLogFilter {
       @Override
       public void actionPerformed(ActionEvent e) {
         reloadThreads();
+        threadSearchField.setText("");
       }
     }), "wrap");
   }
 
+  private void filterThreadModelList(String filter) {
+    for (int i = 0; i < listModel.getSize(); i++) {
+      String s = listModel.get(i);
+      if (!s.startsWith(filter)) {
+        if (listModel.contains(s)) {
+          listModel.removeElement(s);
+          filteredListModel.addElement(s);
+          i--;
+        }
+      }
+    }
+    for (int i = 0; i < filteredListModel.getSize(); i++) {
+      String s = filteredListModel.get(i);
+      if (s.startsWith(filter)) {
+        if (!listModel.contains(s)) {
+          listModel.addElement(s);
+          filteredListModel.removeElement(s);
+          i--;
+        }
+      }
+    }
+  }
+  
   private void clearSelection() {
     selectedThread.clear();
     jList.clearSelection();
